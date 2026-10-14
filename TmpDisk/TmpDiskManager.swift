@@ -44,6 +44,11 @@ class TmpDiskManager {
         // Discover existing volumes using shared logic
         for volume in DiskOperations.findAllVolumes() {
             self.volumes.insert(volume)
+            // A relaunch discovers the mounted volume from its metadata. Restore
+            // its periodic save timer too, since diskCreated is not called here.
+            if volume.hasSyncSource && volume.syncInterval > 0 {
+                self.startSyncTimer(for: volume)
+            }
         }
 
         // AutoCreate any saved TmpDisks

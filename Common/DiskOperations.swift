@@ -413,15 +413,22 @@ class DiskOperations {
     static func findAllVolumes() -> [TmpDiskVolume] {
         var volumes: [TmpDiskVolume] = []
 
-        // Check /Volumes for RAM disks
-        if let vols = try? FileManager.default.contentsOfDirectory(atPath: "/Volumes") {
-            for vol in vols {
-                let tmpdiskFilePath = "/Volumes/\(vol)/.tmpdisk"
-                if FileManager.default.fileExists(atPath: tmpdiskFilePath),
-                   let jsonData = FileManager.default.contents(atPath: tmpdiskFilePath),
-                   let volume = try? JSONDecoder().decode(TmpDiskVolume.self, from: jsonData) {
-                    volumes.append(volume)
-                }
+        func appendVolume(at mountPath: String) {
+            let metadataPath = "\(mountPath)/.tmpdisk"
+            guard FileManager.default.fileExists(atPath: metadataPath),
+                  let jsonData = FileManager.default.contents(atPath: metadataPath),
+                  let volume = try? JSONDecoder().decode(TmpDiskVolume.self, from: jsonData),
+                  !volumes.contains(where: { $0.name == volume.name }) else {
+                return
+            }
+            volumes.append(volume)
+        }
+
+        // Enumerate actual mounted volumes instead of assuming all disks live
+        // under /Volumes. Hidden disks can be mounted at arbitrary paths.
+        if let mountedVolumes = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: nil) {
+            for mountURL in mountedVolumes {
+                appendVolume(at: mountURL.path)
             }
         }
 
@@ -429,15 +436,7 @@ class DiskOperations {
         let rootFolder = TmpDiskConfig.rootFolder
         if let vols = try? FileManager.default.contentsOfDirectory(atPath: rootFolder) {
             for vol in vols {
-                let tmpdiskFilePath = "\(rootFolder)/\(vol)/.tmpdisk"
-                if FileManager.default.fileExists(atPath: tmpdiskFilePath),
-                   let jsonData = FileManager.default.contents(atPath: tmpdiskFilePath),
-                   let volume = try? JSONDecoder().decode(TmpDiskVolume.self, from: jsonData) {
-                    // Avoid duplicates
-                    if !volumes.contains(where: { $0.name == volume.name }) {
-                        volumes.append(volume)
-                    }
-                }
+                appendVolume(at: "\(rootFolder)/\(vol)")
             }
         }
 
